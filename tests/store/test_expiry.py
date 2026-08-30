@@ -70,7 +70,7 @@ def test_sweeper_cancels_expired_and_restocks(client):
 
 def test_sweeper_skips_fresh_orders(client):
     """未超时的订单不受清扫影响。"""
-    admin_headers, user_headers, pid = _setup(client)
+    _, user_headers, pid = _setup(client)
     order_id = _create_order(client, user_headers, pid).json()["id"]
 
     factory = client.app.state.test_session_factory
