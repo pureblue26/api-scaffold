@@ -30,7 +30,12 @@ async def get_current_user(
     except InvalidTokenError:
         raise UnauthorizedError("无效或过期的令牌")
 
-    user = await service.get_user_by_id(session, int(payload["sub"]))
+    user_id = int(payload["sub"])
+    # Redis 双检查：登出黑名单 + 版本号（改密后旧 token 立即失效）
+    if not await service.verify_token_valid(payload, user_id):
+        raise UnauthorizedError("令牌已失效")
+
+    user = await service.get_user_by_id(session, user_id)
     if user is None:
         raise UnauthorizedError("用户不存在")
     return user

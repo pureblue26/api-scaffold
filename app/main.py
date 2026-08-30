@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
+from app.core.redis import close_redis, init_redis
 from app.domains.auth.router import router as auth_router
 from app.domains.health.router import router as health_router
 from app.domains.store.router import router as store_router
@@ -25,8 +26,11 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("应用启动 | 环境=%s | DEBUG=%s", settings.ENVIRONMENT.value, settings.DEBUG)
     logger.info("数据库: %s", settings.DATABASE_URL)
+    await init_redis()
+    logger.info("Redis: %s", settings.REDIS_URL)
     yield
     logger.info("应用关闭")
+    await close_redis()
 
 
 settings = get_settings()

@@ -43,6 +43,13 @@ class BadRequestError(AppError):
     detail = "请求参数错误"
 
 
+class TooManyRequestsError(AppError):
+    """限流触发（429）。"""
+
+    status_code = 429
+    detail = "请求过于频繁"
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """把 AppError 的所有子类注册为 FastAPI 异常处理器。"""
 

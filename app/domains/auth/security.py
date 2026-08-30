@@ -30,17 +30,23 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ---------------- JWT ----------------
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: int, ver: int = 1) -> str:
     """签发 JWT。
 
-    payload 三个字段：
-    - sub: 用户 id（字符串，JWT 标准规定 sub 必须是字符串）
-    - exp: 过期时间（PyJWT 解码时自动校验，过期直接报错）
+    payload 字段：
+    - sub: 用户 id（JWT 标准规定 sub 必须是字符串）
+    - jti: token 唯一 id——登出时加入 Redis 黑名单，实现单点失效
+    - ver: token 版本号——改密码时 +1，让该用户所有旧 token 失效
+    - exp: 过期时间（PyJWT 解码自动校验）
     - iat: 签发时间（审计用）
     """
+    import uuid
+
     now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
+        "jti": uuid.uuid4().hex,
+        "ver": ver,
         "iat": now,
         "exp": now + timedelta(minutes=auth_settings.JWT_EXPIRE_MINUTES),
     }

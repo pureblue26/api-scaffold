@@ -2,7 +2,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.auth.models import User
-from app.domains.store import data
+from app.domains.store import cache, data
 from app.domains.store.exceptions import (
     InsufficientStockError,
     InvalidOrderStateError,
@@ -16,7 +16,9 @@ from app.domains.store.schemas import OrderItemIn
 async def create_product(session: AsyncSession, name: str, price: int, stock: int) -> Product:
     product = Product(name=name, price=price, stock=stock)
     session.add(product)
-    return await data.save(session, product)
+    saved = await data.save(session, product)
+    await cache.invalidate_products()  # 缓存失效：新商品立即可见
+    return saved
 
 
 async def list_products(session: AsyncSession) -> list[Product]:
@@ -55,7 +57,12 @@ async def create_order(session: AsyncSession, user: User, items: list[OrderItemI
 
     order = Order(user_id=user.id, total_amount=total, items=order_items)
     session.add(order)
-    return await data.save(session, order)
+    saved = await data.save(session, order)
+    # 库存变了：失效列表缓存 + 涉及的单个商品缓存
+    await cache.invalidate_products()
+    for item in order_items:
+        await cache.invalidate_product(item.product_id)
+    return saved
 
 
 async def get_order(session: AsyncSession, order_id: int, user: User) -> Order:
@@ -104,4 +111,7 @@ async def cancel_order(session: AsyncSession, order_id: int, user: User) -> Orde
         await data.add_stock(session, item.product_id, item.quantity)
     await session.commit()
     order = await data.get_order_by_id(session, order_id)
+    await cache.invalidate_products()  # 库存回补：缓存失效
+    for item in order.items:
+        await cache.invalidate_product(item.product_id)
     return order

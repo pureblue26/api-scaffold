@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.base import get_session
 from app.domains.auth.dependencies import get_current_user, require_admin
 from app.domains.auth.models import User
-from app.domains.store import service
+from app.domains.store import cache, service
+from app.domains.store.exceptions import ProductNotFoundError
 from app.domains.store.schemas import (
     OrderCreate,
     OrderOut,
@@ -20,7 +21,19 @@ router = APIRouter(tags=["store"])
 
 @router.get("/products", response_model=list[ProductOut])
 async def products(session: AsyncSession = Depends(get_session)) -> list[ProductOut]:
-    return [ProductOut.model_validate(p) for p in await service.list_products(session)]
+    """商品列表（走 Redis 缓存，miss 才查 DB；写路径自动失效）。"""
+    return [ProductOut.model_validate(p) for p in await cache.get_products_cached(session)]
+
+
+@router.get("/products/{product_id}", response_model=ProductOut)
+async def product_detail(
+    product_id: int, session: AsyncSession = Depends(get_session)
+) -> ProductOut:
+    """商品详情（走 Redis 缓存，miss 才查 DB）。"""
+    product = await cache.get_product_cached(session, product_id)
+    if product is None:
+        raise ProductNotFoundError()
+    return ProductOut.model_validate(product)
 
 
 @router.post("/products", response_model=ProductOut, status_code=201)

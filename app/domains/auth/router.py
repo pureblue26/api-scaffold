@@ -1,10 +1,16 @@
 """auth 领域接口：注册 / 登录 / 当前用户 / 用户列表。"""
 from fastapi import APIRouter, Depends
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.ratelimit import rate_limit
 from app.database.base import get_session
 from app.domains.auth import service
-from app.domains.auth.dependencies import get_current_user, require_admin
+from app.domains.auth.dependencies import (
+    bearer_scheme,
+    get_current_user,
+    require_admin,
+)
 from app.domains.auth.models import User
 from app.domains.auth.schemas import (
     PasswordUpdate,
@@ -14,7 +20,7 @@ from app.domains.auth.schemas import (
     UserOut,
     UserRegister,
 )
-from app.domains.auth.security import create_access_token
+from app.domains.auth.security import create_access_token, decode_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -26,11 +32,23 @@ async def register(data: UserRegister, session: AsyncSession = Depends(get_sessi
     return UserOut.model_validate(user)
 
 
-@router.post("/login", response_model=TokenOut)
+@router.post("/login", response_model=TokenOut, dependencies=[Depends(rate_limit(5, 60))])
 async def login(data: UserLogin, session: AsyncSession = Depends(get_session)) -> TokenOut:
     """登录：用户名密码换 JWT。"""
     user = await service.authenticate(session, data.username, data.password)
-    return TokenOut(access_token=create_access_token(user.id))
+    ver = await service.get_user_epoch(user.id)
+    return TokenOut(access_token=create_access_token(user.id, ver=ver))
+
+
+@router.post("/logout")
+async def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """登出：当前 token 立即失效（黑名单 TTL = 剩余有效期）。"""
+    payload = decode_access_token(credentials.credentials)
+    await service.logout(current_user.id, payload)
+    return {"message": "已登出"}
 
 
 @router.get("/me", response_model=UserOut)

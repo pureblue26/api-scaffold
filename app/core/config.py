@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     DATABASE_NAME: str = "scaffold_dev"
     DATABASE_ECHO: bool = False
 
+    # ---------------- Redis（全局基础设施） ----------------
+    REDIS_URL: str = "redis://127.0.0.1:6380/0"
+
     @property
     def DATABASE_URL(self) -> str:
         """SQLAlchemy 异步连接串（密码含 @ : / 等特殊字符也能正确拼装）。"""
@@ -74,6 +77,8 @@ class Settings(BaseSettings):
             raise ValueError("生产环境必须通过环境变量注入 DATABASE_PASSWORD，禁止使用默认密码")
         if self.DEBUG:
             raise ValueError("生产环境禁止 DEBUG=True")
+        if not self.REDIS_URL or "127.0.0.1" in self.REDIS_URL:
+            raise ValueError("生产环境必须注入 REDIS_URL，禁止使用本地默认值")
         return self
 
 

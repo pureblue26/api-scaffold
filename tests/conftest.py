@@ -15,9 +15,17 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
+from app.core.redis import close_redis, get_redis
 from app.database.base import get_session
 from app.main import app
 from app.models.base import BaseModel
+
+
+@pytest.fixture(scope="session", autouse=True)
+def redis_ready():
+    """Redis 由 get_redis 按事件循环自动创建；会话结束统一关闭。"""
+    yield
+    asyncio.run(close_redis())
 
 
 @pytest.fixture
@@ -39,6 +47,11 @@ def client():
             await session.commit()
 
     asyncio.run(setup())
+
+    async def flush_redis():
+        await (await get_redis()).flushdb()  # 每个测试前清空缓存/黑名单/限流计数
+
+    asyncio.run(flush_redis())
     app.state.test_session_factory = TestSession
     app.dependency_overrides[get_session] = override_session
     from fastapi.testclient import TestClient
