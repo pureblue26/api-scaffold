@@ -3,7 +3,7 @@
 并发安全的关键：把条件写进 UPDATE 语句，让数据库来串行化，
 而不是"先 SELECT 判断再 UPDATE"（那是竞态）。
 """
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -15,9 +15,18 @@ async def get_product_by_id(session: AsyncSession, product_id: int) -> Product |
     return await session.get(Product, product_id)
 
 
-async def list_products(session: AsyncSession) -> list[Product]:
-    result = await session.scalars(select(Product).order_by(Product.id))
-    return list(result)
+async def list_products(
+    session: AsyncSession, limit: int, offset: int
+) -> tuple[list[Product], int]:
+    """分页查询：返回（当前页商品, 总条数）。
+
+    LIMIT/OFFSET + 主键索引：只读一页，不再全表扫描（压测暴露的瓶颈）。
+    """
+    total = await session.scalar(select(func.count()).select_from(Product)) or 0
+    result = await session.scalars(
+        select(Product).order_by(Product.id).limit(limit).offset(offset)
+    )
+    return list(result), total
 
 
 async def get_order_by_id(session: AsyncSession, order_id: int) -> Order | None:

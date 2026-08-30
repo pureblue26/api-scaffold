@@ -1,5 +1,5 @@
 """store 领域接口：商品 / 订单。"""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.base import get_session
@@ -10,6 +10,7 @@ from app.domains.store.exceptions import ProductNotFoundError
 from app.domains.store.schemas import (
     OrderCreate,
     OrderOut,
+    PageOut,
     ProductCreate,
     ProductOut,
 )
@@ -19,10 +20,23 @@ router = APIRouter(tags=["store"])
 
 # ---------------- 商品 ----------------
 
-@router.get("/products", response_model=list[ProductOut])
-async def products(session: AsyncSession = Depends(get_session)) -> list[ProductOut]:
-    """商品列表（走 Redis 缓存，miss 才查 DB；写路径自动失效）。"""
-    return [ProductOut.model_validate(p) for p in await cache.get_products_cached(session)]
+@router.get("/products", response_model=PageOut[ProductOut])
+async def products(
+    limit: int = Query(default=20, ge=1, le=100, description="每页条数"),
+    offset: int = Query(default=0, ge=0, description="跳过条数"),
+    session: AsyncSession = Depends(get_session),
+) -> PageOut[ProductOut]:
+    """商品列表（分页 + Redis 缓存，miss 才查 DB；新建商品时版本号失效）。"""
+    page = await cache.get_products_cached(session, limit, offset)
+    items = [ProductOut.model_validate(p) for p in page["items"]]
+    total = page["total"]
+    return PageOut(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + len(items) < total,
+    )
 
 
 @router.get("/products/{product_id}", response_model=ProductOut)

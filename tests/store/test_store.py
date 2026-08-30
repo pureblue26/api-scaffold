@@ -54,7 +54,7 @@ def test_create_order_deducts_stock_and_snapshot_price(client):
     assert body["status"] == "pending"
     assert body["total_amount"] == 1999 * 2
     assert body["items"][0]["unit_price"] == 1999  # 价格快照
-    assert client.get("/api/products").json()[0]["stock"] == 3  # 5-2
+    assert client.get("/api/products").json()["items"][0]["stock"] == 3  # 5-2
 
 
 def test_create_order_insufficient_stock(client):
@@ -67,7 +67,7 @@ def test_create_order_insufficient_stock(client):
     assert r.status_code == 409
     assert "库存不足" in r.json()["message"]
     # 整单回滚：库存不变
-    assert client.get("/api/products").json()[0]["stock"] == 1
+    assert client.get("/api/products").json()["items"][0]["stock"] == 1
 
 
 def test_order_not_visible_to_others(client):
@@ -109,7 +109,7 @@ def test_cancel_order_restocks(client):
     r = client.post(f"/api/orders/{order_id}/cancel", headers=user_headers)
     assert r.status_code == 200
     assert r.json()["status"] == "cancelled"
-    assert client.get("/api/products").json()[0]["stock"] == 5  # 回补
+    assert client.get("/api/products").json()["items"][0]["stock"] == 5  # 回补
 
 
 def test_cancel_after_pay_rejected(client):
@@ -154,7 +154,7 @@ def test_concurrent_orders_last_item_only_one_wins(client):
     r1, r2 = asyncio.run(race())
     statuses = sorted([r1.status_code, r2.status_code])
     assert statuses == [201, 409], f"期望一成一败，实际 {statuses}"
-    assert client.get("/api/products").json()[0]["stock"] == 0  # 库存只扣了一次
+    assert client.get("/api/products").json()["items"][0]["stock"] == 0  # 库存只扣了一次
 
 
 def test_concurrent_pay_and_cancel_only_one_wins(client):
@@ -181,6 +181,6 @@ def test_concurrent_pay_and_cancel_only_one_wins(client):
     # 赢家要么 paid 要么 cancelled
     assert final["status"] in ("paid", "cancelled")
     # 若取消，库存回补；若支付，库存仍扣着
-    stock = client.get("/api/products").json()[0]["stock"]
+    stock = client.get("/api/products").json()["items"][0]["stock"]
     # 商品默认库存 10，下单扣 1：cancelled 回补到 10，paid 保持 9
     assert stock == (10 if final["status"] == "cancelled" else 9)

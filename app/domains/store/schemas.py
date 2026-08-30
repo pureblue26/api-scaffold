@@ -6,6 +6,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.domains.store.models import OrderStatus
 
 
+class PageOut[T](BaseModel):  # Python 3.12 泛型语法（PEP 695）
+    """通用分页响应：items + 总数 + 当前页参数 + 是否还有下一页。"""
+
+    items: list[T]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     price: int = Field(ge=0, description="单价（分）")

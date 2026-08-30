@@ -17,7 +17,7 @@ from app.domains.store.schemas import ProductOut
 
 settings = get_settings()
 
-PRODUCTS_LIST_KEY = "store:products"
+PRODUCTS_LIST_KEY = "store:products:ver"  # 列表缓存版本号（失效 = +1）
 PRODUCT_LIST_TTL = 60  # 秒
 
 
@@ -56,14 +56,37 @@ async def _get_or_set(key: str, ttl: int, loader, *, cache_none: bool = False):
         await redis.delete(lock_key)
 
 
-async def get_products_cached(session) -> list[dict]:
-    """商品列表缓存。返回 dict 列表，由 router 转 ProductOut。"""
+async def _products_version() -> int:
+    """当前列表缓存版本号。
+
+    键不存在时初始化为 1：否则 INCR 对不存在的键从 1 开始，
+    第一次失效后版本还是 1（auth 域踩过同一个坑，这里又踩了）。
+    """
+    redis = await get_redis()
+    val = await redis.get(PRODUCTS_LIST_KEY)
+    if val is None:
+        await redis.set(PRODUCTS_LIST_KEY, 1)
+        return 1
+    return int(val)
+
+
+async def get_products_cached(session, limit: int, offset: int) -> dict:
+    """商品列表缓存（分页）：键带版本号。
+
+    为什么用版本号而不是删 key：分页后同一列表有多个页面缓存，
+    逐个删太丑；失效 = 版本号 +1，新请求走新版本键，旧页"失联"靠 TTL 清理。
+    """
 
     async def loader():
-        products = await data.list_products(session)
-        return [ProductOut.model_validate(p).model_dump(mode="json") for p in products]
+        items, total = await data.list_products(session, limit, offset)
+        return {
+            "items": [ProductOut.model_validate(p).model_dump(mode="json") for p in items],
+            "total": total,
+        }
 
-    return (await _get_or_set(PRODUCTS_LIST_KEY, PRODUCT_LIST_TTL, loader)) or []
+    ver = await _products_version()
+    key = f"store:products:v{ver}:o{offset}:l{limit}"
+    return await _get_or_set(key, PRODUCT_LIST_TTL, loader)
 
 
 async def get_product_cached(session, product_id: int) -> dict | None:
@@ -81,10 +104,10 @@ async def get_product_cached(session, product_id: int) -> dict | None:
 async def invalidate_products() -> None:
     """列表缓存失效：只在【新建商品】时调用。
 
-    下单/取消【不】失效列表——列表库存允许短暂滞后（浏览页），
-    靠 TTL 自然过期；详情缓存按商品单独失效（决策页必须精确）。
+    实现 = 版本号 +1：旧版本的页面缓存全部"失联"，新请求走新版本键。
+    下单/取消【不】失效列表——列表库存允许短暂滞后（浏览页），靠 TTL 自然过期。
     """
-    await (await get_redis()).delete(PRODUCTS_LIST_KEY)
+    await (await get_redis()).incr(PRODUCTS_LIST_KEY)
 
 
 async def invalidate_product(product_id: int) -> None:

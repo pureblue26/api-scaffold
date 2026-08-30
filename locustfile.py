@@ -35,7 +35,7 @@ class StoreUser(HttpUser):
     def _products(self):
         """取商品列表（走 Redis 缓存）。"""
         r = self.client.get("/api/products")
-        return r.json() if r.status_code == 200 else []
+        return r.json().get("items", []) if r.status_code == 200 else []
 
     @task(6)
     def browse_products(self):
