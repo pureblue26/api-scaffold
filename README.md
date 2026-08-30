@@ -42,7 +42,10 @@ app/
   models/
     base.py             # ORM 基类 BaseModel（领域模型继承它）
   domains/              # ★ 领域层：一个业务领域一个自包含文件夹
-    health/             # 示范领域（健康检查）
+    auth/               # 认证领域（JWT + bcrypt）
+      router.py  schemas.py  models.py  service.py
+      dependencies.py  security.py  config.py  exceptions.py
+    health/             # 健康检查领域
       router.py
     README.md           # 领域层规则与接入流程
 tests/
@@ -65,6 +68,17 @@ alembic/                # 数据库迁移
 # Windows PowerShell 切换环境
 $env:ENVIRONMENT='test'; uv run python -m app.main
 ```
+
+## 接口一览
+
+| 方法 | 路径 | 说明 | 权限 |
+|---|---|---|---|
+| POST | /api/auth/register | 注册用户 | 公开 |
+| POST | /api/auth/login | 登录换 JWT | 公开 |
+| GET | /api/auth/me | 当前用户信息 | 需 Bearer Token |
+| GET | /api/auth/users | 用户列表 | 仅管理员 |
+| GET | /api/health | 存活检查 | 公开 |
+| GET | /api/health/db | 数据库连通性 | 公开 |
 
 ## 开发常用命令
 

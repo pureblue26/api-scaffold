@@ -5,6 +5,8 @@ description = "FastAPI 工程脚手架：配置/异常/健康检查/CI 开箱即
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.19.1",
+    "bcrypt>=4.1",
+    "pyjwt>=2.9",
     "asyncpg>=0.31.0",
     "fastapi>=0.141.1",
     "pydantic-settings>=2.15.0",
@@ -26,3 +28,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI 的 Depends/HTTPBearer 在参数默认值里调用是标准写法，豁免 B008
+extend-immutable-calls = ["fastapi.Depends", "fastapi.security.HTTPBearer"]
