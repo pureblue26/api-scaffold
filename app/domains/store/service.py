@@ -21,6 +21,37 @@ async def create_product(session: AsyncSession, name: str, price: int, stock: in
     return saved
 
 
+async def update_product(
+    session: AsyncSession,
+    product_id: int,
+    name: str | None = None,
+    price: int | None = None,
+    stock: int | None = None,
+) -> Product:
+    """改商品（仅管理员）。
+
+    缓存失效比订单严格：名称/价格变了，列表里必须及时可见（版本+1），
+    不能像订单那样容忍库存滞后——"改了什么"决定"失效策略"。
+    注意：stock 是覆盖式写入（管理员权威修正）。与下单原子扣减并发时，
+    管理员写入可能覆盖刚扣的库存——这是权威操作的有意取舍。
+    """
+    product = await data.get_product_by_id(session, product_id)
+    if product is None:
+        raise ProductNotFoundError()
+
+    if name is not None:
+        product.name = name
+    if price is not None:
+        product.price = price
+    if stock is not None:
+        product.stock = stock
+
+    saved = await data.save(session, product)
+    await cache.invalidate_products()  # 名称/价格变了：列表必须失效
+    await cache.invalidate_product(product_id)  # 详情也失效
+    return saved
+
+
 async def list_products(session: AsyncSession) -> list[Product]:
     return await data.list_products(session)
 

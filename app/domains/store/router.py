@@ -13,6 +13,7 @@ from app.domains.store.schemas import (
     PageOut,
     ProductCreate,
     ProductOut,
+    ProductUpdate,
 )
 
 router = APIRouter(tags=["store"])
@@ -58,6 +59,20 @@ async def create_product(
 ) -> ProductOut:
     """创建商品（仅管理员）。"""
     product = await service.create_product(session, data.name, data.price, data.stock)
+    return ProductOut.model_validate(product)
+
+
+@router.patch("/products/{product_id}", response_model=ProductOut)
+async def update_product(
+    product_id: int,
+    data: ProductUpdate,
+    session: AsyncSession = Depends(get_session),
+    admin: User = Depends(require_admin),
+) -> ProductOut:
+    """修改商品（仅管理员）。名称/价格/库存至少改一个。"""
+    product = await service.update_product(
+        session, product_id, name=data.name, price=data.price, stock=data.stock
+    )
     return ProductOut.model_validate(product)
 
 

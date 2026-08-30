@@ -85,6 +85,7 @@ $env:ENVIRONMENT='test'; uv run python -m app.main
 | GET | /api/products | 商品列表（Redis 缓存） | 公开 |
 | GET | /api/products/{id} | 商品详情（Redis 缓存） | 公开 |
 | POST | /api/products | 创建商品 | 仅管理员 |
+| PATCH | /api/products/{id} | 修改商品（名称/价格/库存） | 仅管理员 |
 | POST | /api/orders | 下单（原子扣库存） | 需 Bearer Token |
 | GET | /api/orders | 我的订单 | 需 Bearer Token |
 | GET | /api/orders/{id} | 订单详情 | 本人/管理员 |

@@ -1,7 +1,7 @@
 """库存/订单领域请求/响应模型。"""
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domains.store.models import OrderStatus
 
@@ -20,6 +20,22 @@ class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     price: int = Field(ge=0, description="单价（分）")
     stock: int = Field(ge=0)
+
+
+class ProductUpdate(BaseModel):
+    """改商品：字段全部可选，但至少给一个；未知字段直接拒绝。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    price: int | None = Field(default=None, ge=0)
+    stock: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _at_least_one_field(self) -> "ProductUpdate":
+        if self.name is None and self.price is None and self.stock is None:
+            raise ValueError("至少提供一个要修改的字段")
+        return self
 
 
 class ProductOut(BaseModel):

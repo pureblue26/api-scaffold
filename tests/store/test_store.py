@@ -184,3 +184,97 @@ def test_concurrent_pay_and_cancel_only_one_wins(client):
     stock = client.get("/api/products").json()["items"][0]["stock"]
     # 商品默认库存 10，下单扣 1：cancelled 回补到 10，paid 保持 9
     assert stock == (10 if final["status"] == "cancelled" else 9)
+
+
+# ---------------- 改商品（仅管理员） ----------------
+
+def test_update_product_as_admin(client):
+    admin_id, admin_headers = _register(client, "admin")
+    make_admin(client, admin_id)
+    product = _create_product(client, admin_headers, name="旧名", price=100, stock=5)
+
+    r = client.patch(
+        f"/api/products/{product['id']}",
+        json={"name": "新名", "price": 200, "stock": 8},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "新名"
+    assert body["price"] == 200
+    assert body["stock"] == 8
+
+
+def test_update_product_partial(client):
+    """PATCH 语义：只改一个字段，其他不变。"""
+    admin_id, admin_headers = _register(client, "admin")
+    make_admin(client, admin_id)
+    product = _create_product(client, admin_headers, name="保持名", price=100, stock=5)
+
+    r = client.patch(
+        f"/api/products/{product['id']}", json={"price": 999}, headers=admin_headers
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "保持名"
+    assert body["price"] == 999
+    assert body["stock"] == 5
+
+
+def test_update_product_forbidden_for_normal_user(client):
+    admin_id, admin_headers = _register(client, "admin")
+    make_admin(client, admin_id)
+    product = _create_product(client, admin_headers)
+    _, user_headers = _register(client, "bob")
+
+    r = client.patch(
+        f"/api/products/{product['id']}", json={"price": 1}, headers=user_headers
+    )
+    assert r.status_code == 403
+
+
+def test_update_product_not_found(client):
+    admin_id, admin_headers = _register(client, "admin")
+    make_admin(client, admin_id)
+    r = client.patch("/api/products/99999", json={"price": 1}, headers=admin_headers)
+    assert r.status_code == 404
+
+
+def test_update_product_validation(client):
+    admin_id, admin_headers = _register(client, "admin")
+    make_admin(client, admin_id)
+    product = _create_product(client, admin_headers)
+
+    # 空 body：至少一个字段
+    assert client.patch(f"/api/products/{product['id']}", json={}, headers=admin_headers).status_code == 422
+    # 非法值：负数
+    assert client.patch(f"/api/products/{product['id']}", json={"price": -1}, headers=admin_headers).status_code == 422
+    # 未知字段：extra=forbid
+    assert client.patch(f"/api/products/{product['id']}", json={"hack": 1}, headers=admin_headers).status_code == 422
+
+
+def test_update_product_invalidates_caches(client):
+    """改商品 = 名称/价格变了：列表版本+1，详情缓存失效（比订单严格）。"""
+    import asyncio
+
+    from app.core.redis import get_redis
+
+    async def ver():
+        return await (await get_redis()).get("store:products:ver")
+
+    async def detail_exists(pid):
+        return await (await get_redis()).exists(f"store:product:{pid}") == 1
+
+    admin_id, admin_headers = _register(client, "admin")
+    make_admin(client, admin_id)
+    product = _create_product(client, admin_headers)
+
+    client.get("/api/products")
+    client.get(f"/api/products/{product['id']}")
+    assert asyncio.run(detail_exists(product["id"])) is True
+
+    client.patch(f"/api/products/{product['id']}", json={"name": "改名"}, headers=admin_headers)
+
+    # 列表版本 +1（旧页失联）；详情缓存删除
+    assert asyncio.run(ver()) == "2"
+    assert asyncio.run(detail_exists(product["id"])) is False
