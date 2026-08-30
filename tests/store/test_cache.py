@@ -40,7 +40,8 @@ def test_product_detail_cached_and_penetration_cache(client):
     assert asyncio.run(_redis_get("store:product:99999")) == ""
 
 
-def test_order_invalidates_list_and_detail_cache(client):
+def test_order_invalidates_detail_but_keeps_list_cache(client):
+    """优化后的失效策略：下单只失效详情缓存，列表缓存保留（靠 TTL）。"""
     admin_id, admin_headers = _register(client, "admin")
     make_admin(client, admin_id)
     product = _create_product(client, admin_headers, stock=5)
@@ -51,6 +52,7 @@ def test_order_invalidates_list_and_detail_cache(client):
     assert asyncio.run(_redis_exists("store:products")) == 1
     assert asyncio.run(_redis_exists(f"store:product:{product['id']}")) == 1
 
-    _create_order(client, user_headers, product["id"])  # 库存变了：缓存失效
-    assert asyncio.run(_redis_exists("store:products")) == 0
+    _create_order(client, user_headers, product["id"])  # 库存变了
+    # 列表缓存保留（浏览页容忍滞后）；详情缓存失效（决策页必须精确）
+    assert asyncio.run(_redis_exists("store:products")) == 1
     assert asyncio.run(_redis_exists(f"store:product:{product['id']}")) == 0

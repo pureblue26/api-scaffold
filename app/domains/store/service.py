@@ -58,8 +58,9 @@ async def create_order(session: AsyncSession, user: User, items: list[OrderItemI
     order = Order(user_id=user.id, total_amount=total, items=order_items)
     session.add(order)
     saved = await data.save(session, order)
-    # 库存变了：失效列表缓存 + 涉及的单个商品缓存
-    await cache.invalidate_products()
+    # 库存变了：只失效涉及商品的【详情】缓存（决策页必须精确）。
+    # 【列表】缓存不失效——靠 TTL 自然过期，避免下单风暴反复重建列表
+    # （压测实测：每次下单都删列表 → 重建尖峰 → P95 恶化）
     for item in order_items:
         await cache.invalidate_product(item.product_id)
     return saved
@@ -111,7 +112,7 @@ async def cancel_order(session: AsyncSession, order_id: int, user: User) -> Orde
         await data.add_stock(session, item.product_id, item.quantity)
     await session.commit()
     order = await data.get_order_by_id(session, order_id)
-    await cache.invalidate_products()  # 库存回补：缓存失效
+    # 同下单：只失效详情缓存，列表靠 TTL
     for item in order.items:
         await cache.invalidate_product(item.product_id)
     return order

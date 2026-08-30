@@ -79,9 +79,10 @@ async def get_product_cached(session, product_id: int) -> dict | None:
 
 
 async def invalidate_products() -> None:
-    """写路径统一失效入口：建商品 / 下单 / 取消 都必须调用。
+    """列表缓存失效：只在【新建商品】时调用。
 
-    只删列表缓存；单商品缓存按需单独删（避免全量删）。
+    下单/取消【不】失效列表——列表库存允许短暂滞后（浏览页），
+    靠 TTL 自然过期；详情缓存按商品单独失效（决策页必须精确）。
     """
     await (await get_redis()).delete(PRODUCTS_LIST_KEY)
 

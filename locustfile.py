@@ -16,16 +16,21 @@ class StoreUser(HttpUser):
 
     def on_start(self):
         if StoreUser.token is None:
-            username = f"load_{uuid.uuid4().hex[:8]}"
-            self.client.post(
-                "/api/auth/register",
-                json={"username": username, "password": "password123"},
-            )
-            r = self.client.post(
-                "/api/auth/login", json={"username": username, "password": "password123"}
-            )
-            StoreUser.token = r.json()["access_token"]
-        self.headers = {"Authorization": f"Bearer {StoreUser.token}"}
+            # 防御：登录可能被限流（429），重试拿不到 token 就不挂任务
+            for _ in range(3):
+                username = f"load_{uuid.uuid4().hex[:8]}"
+                self.client.post(
+                    "/api/auth/register",
+                    json={"username": username, "password": "password123"},
+                )
+                r = self.client.post(
+                    "/api/auth/login", json={"username": username, "password": "password123"}
+                )
+                if r.status_code == 200:
+                    StoreUser.token = r.json()["access_token"]
+                    break
+        if StoreUser.token:
+            self.headers = {"Authorization": f"Bearer {StoreUser.token}"}
 
     def _products(self):
         """取商品列表（走 Redis 缓存）。"""
@@ -52,8 +57,11 @@ class StoreUser(HttpUser):
         if not in_stock:
             return
         product = random.choice(in_stock)
-        self.client.post(
+        with self.client.post(
             "/api/orders",
             json={"items": [{"product_id": product["id"], "quantity": 1}]},
             headers=self.headers,
-        )
+            catch_response=True,
+        ) as resp:
+            if resp.status_code != 201:
+                resp.failure(f"HTTP {resp.status_code}: {resp.text[:150]}")
