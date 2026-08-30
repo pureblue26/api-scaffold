@@ -1,6 +1,6 @@
 """分页测试：页大小/偏移/总数/边界校验。"""
 from tests.conftest import make_admin
-from tests.store.test_store import _create_product, _register
+from tests.store.test_store import _create_order, _create_product, _register
 
 
 def _make_products(client, count=5):
