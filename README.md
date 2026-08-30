@@ -76,6 +76,8 @@ $env:ENVIRONMENT='test'; uv run python -m app.main
 | POST | /api/auth/register | 注册用户 | 公开 |
 | POST | /api/auth/login | 登录换 JWT | 公开 |
 | GET | /api/auth/me | 当前用户信息 | 需 Bearer Token |
+| PATCH | /api/auth/me/username | 修改用户名 | 需 Bearer Token |
+| PATCH | /api/auth/me/password | 修改密码（验旧密码） | 需 Bearer Token |
 | GET | /api/auth/users | 用户列表 | 仅管理员 |
 | GET | /api/health | 存活检查 | 公开 |
 | GET | /api/health/db | 数据库连通性 | 公开 |

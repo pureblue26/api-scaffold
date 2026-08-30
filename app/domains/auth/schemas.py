@@ -31,3 +31,16 @@ class UserOut(BaseModel):
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class UsernameUpdate(BaseModel):
+    """改用户名：与注册共用同一套用户名校验规则。"""
+
+    new_username: str = Field(min_length=3, max_length=50, pattern="^[A-Za-z0-9_]+$")
+
+
+class PasswordUpdate(BaseModel):
+    """改密码：必须先验证旧密码。"""
+
+    old_password: str
+    new_password: str = Field(min_length=8, max_length=72)

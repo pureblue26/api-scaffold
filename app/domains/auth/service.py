@@ -40,6 +40,41 @@ async def authenticate(session: AsyncSession, username: str, password: str) -> U
     return user
 
 
+async def update_username(session: AsyncSession, user: User, new_username: str) -> User:
+    """改用户名：排除自己查重 + 唯一约束兜底并发（与注册同一套防御）。"""
+    if new_username == user.username:
+        return user  # 没变化：幂等，直接返回
+
+    taken = await session.scalar(
+        select(User.id).where(User.username == new_username, User.id != user.id)
+    )
+    if taken:
+        raise DuplicateUsernameError()
+
+    user.username = new_username
+    try:
+        await session.commit()
+    except IntegrityError:
+        # 两个用户同时改到同一个新用户名：唯一索引兜底
+        await session.rollback()
+        raise DuplicateUsernameError()
+    await session.refresh(user)
+    return user
+
+
+async def update_password(
+    session: AsyncSession, user: User, old_password: str, new_password: str
+) -> User:
+    """改密码：先验证旧密码（防 token 被盗后直接被改密），再哈希新密码。"""
+    if not verify_password(old_password, user.password_hash):
+        raise InvalidCredentialsError("旧密码不正确")
+
+    user.password_hash = hash_password(new_password)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
 async def get_user_by_id(session: AsyncSession, user_id: int) -> User | None:
     return await session.get(User, user_id)
 

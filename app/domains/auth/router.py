@@ -6,7 +6,14 @@ from app.database.base import get_session
 from app.domains.auth import service
 from app.domains.auth.dependencies import get_current_user, require_admin
 from app.domains.auth.models import User
-from app.domains.auth.schemas import TokenOut, UserLogin, UserOut, UserRegister
+from app.domains.auth.schemas import (
+    PasswordUpdate,
+    TokenOut,
+    UserLogin,
+    UsernameUpdate,
+    UserOut,
+    UserRegister,
+)
 from app.domains.auth.security import create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -30,6 +37,30 @@ async def login(data: UserLogin, session: AsyncSession = Depends(get_session)) -
 async def me(current_user: User = Depends(get_current_user)) -> UserOut:
     """当前登录用户信息（演示认证依赖的用法）。"""
     return UserOut.model_validate(current_user)
+
+
+@router.patch("/me/username", response_model=UserOut)
+async def update_username(
+    data: UsernameUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> UserOut:
+    """修改当前用户用户名（重名返回 409）。"""
+    user = await service.update_username(session, current_user, data.new_username)
+    return UserOut.model_validate(user)
+
+
+@router.patch("/me/password", response_model=UserOut)
+async def update_password(
+    data: PasswordUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> UserOut:
+    """修改当前用户密码（需验证旧密码）。"""
+    user = await service.update_password(
+        session, current_user, data.old_password, data.new_password
+    )
+    return UserOut.model_validate(user)
 
 
 @router.get("/users", response_model=list[UserOut])
