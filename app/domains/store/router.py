@@ -11,6 +11,7 @@ from app.domains.store.schemas import (
     OrderCreate,
     OrderOut,
     PageOut,
+    PayRequest,
     ProductCreate,
     ProductOut,
     ProductUpdate,
@@ -127,10 +128,15 @@ async def order_detail(
 @router.post("/orders/{order_id}/pay", response_model=OrderOut)
 async def pay_order(
     order_id: int,
+    data: PayRequest | None = None,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> OrderOut:
-    return OrderOut.model_validate(await service.pay_order(session, order_id, current_user))
+    """支付（幂等）：重复支付返回当前状态；带 payment_id 时同一流水只处理一次。"""
+    payment_id = data.payment_id if data else None
+    return OrderOut.model_validate(
+        await service.pay_order(session, order_id, current_user, payment_id)
+    )
 
 
 @router.post("/orders/{order_id}/cancel", response_model=OrderOut)

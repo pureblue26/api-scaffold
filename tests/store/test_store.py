@@ -84,19 +84,22 @@ def test_order_not_visible_to_others(client):
 
 # ---------------- 状态机 ----------------
 
-def test_pay_order_and_pay_twice_rejected(client):
+def test_pay_twice_is_idempotent(client):
+    """支付幂等：已 PAID 的订单再次支付返回当前状态（200），不是 409。"""
     admin_id, admin_headers = _register(client, "admin")
     make_admin(client, admin_id)
     product = _create_product(client, admin_headers)
     _, user_headers = _register(client, "bob")
     order_id = _create_order(client, user_headers, product["id"]).json()["id"]
 
-    r = client.post(f"/api/orders/{order_id}/pay", headers=user_headers)
-    assert r.status_code == 200
-    assert r.json()["status"] == "paid"
+    first = client.post(f"/api/orders/{order_id}/pay", headers=user_headers)
+    assert first.status_code == 200
+    assert first.json()["status"] == "paid"
 
-    r = client.post(f"/api/orders/{order_id}/pay", headers=user_headers)
-    assert r.status_code == 409  # PAID 不能再支付
+    # 重复支付：幂等成功（重复达成已达成的结果）
+    second = client.post(f"/api/orders/{order_id}/pay", headers=user_headers)
+    assert second.status_code == 200
+    assert second.json()["status"] == "paid"
 
 
 def test_cancel_order_restocks(client):

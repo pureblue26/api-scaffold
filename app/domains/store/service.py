@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.redis import get_redis
 from app.domains.auth.models import User
 from app.domains.store import cache, data
 from app.domains.store.exceptions import (
@@ -122,18 +123,43 @@ async def list_user_orders(
     return await data.list_orders_by_user(session, user_id, limit, offset)
 
 
-async def pay_order(session: AsyncSession, order_id: int, user: User) -> Order:
-    """支付：PENDING → PAID。
+async def pay_order(
+    session: AsyncSession, order_id: int, user: User, payment_id: str | None = None
+) -> Order:
+    """支付：PENDING → PAID（幂等）。
+
+    两层幂等：
+    1. 状态幂等（核心）：已 PAID 的订单再次支付返回当前状态（200），
+       不是 409——"重复达成已达成的结果"算成功；CANCELLED 仍 409。
+    2. 幂等键去重（Redis SETNX）：带 payment_id 时，同一支付流水只处理
+       一次，防止网关回调重放/并发重复。键存 24h，TTL 自动清理。
 
     超时防线：过期的 PENDING 订单【不能支付】——先自动取消（回补库存）
     再拒绝。防止"30 分钟后回来，订单已超时却支付成功"。
     """
     order = await get_order(session, order_id, user)
+
+    # 幂等键去重：同一支付流水号只允许绑定一个订单
+    if payment_id:
+        redis = await get_redis()
+        dedup_key = f"payment:{payment_id}"
+        if not await redis.set(dedup_key, str(order_id), nx=True, ex=86400):
+            prev_order = await redis.get(dedup_key)
+            if prev_order != str(order_id):
+                raise InvalidOrderStateError("支付流水号已被其他订单使用")
+            # 同一订单重放：幂等返回当前状态
+            return order
+
+    # 超时防线
     if order.status == OrderStatus.PENDING.value and _is_expired(order):
         await _restock_order_core(
-        session, order, OrderStatus.PENDING, OrderStatus.CANCELLED, "订单已超时取消"
-    )
+            session, order, OrderStatus.PENDING, OrderStatus.CANCELLED, "订单已超时取消"
+        )
         raise InvalidOrderStateError("订单已超时取消，无法支付")
+
+    # 状态幂等：已是 PAID，直接返回（重复支付 = 成功）
+    if order.status == OrderStatus.PAID.value:
+        return order
 
     ok = await data.transition_order_status(
         session, order_id, OrderStatus.PENDING.value, OrderStatus.PAID.value

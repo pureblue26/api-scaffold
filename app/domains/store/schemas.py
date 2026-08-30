@@ -72,3 +72,9 @@ class OrderOut(BaseModel):
     total_amount: int
     created_at: datetime
     items: list[OrderItemOut]
+
+
+class PayRequest(BaseModel):
+    """支付请求：可选携带支付流水号（幂等键，防网关回调重放/重复提交）。"""
+
+    payment_id: str | None = Field(default=None, max_length=64)
