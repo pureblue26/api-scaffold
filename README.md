@@ -9,7 +9,7 @@ FastAPI 工程脚手架：配置工程（pydantic-settings + fail-fast）、异�
 - Python 3.12 + [uv](https://docs.astral.sh/uv/)
 - FastAPI + SQLAlchemy(async) + asyncpg + Alembic
 - pydantic-settings（类型化环境配置）
-- PostgreSQL 16（docker-compose）
+- PostgreSQL 16 + Redis 7（docker-compose）
 - pytest + ruff + GitHub Actions CI
 
 ## 快速开始
@@ -76,11 +76,20 @@ $env:ENVIRONMENT='test'; uv run python -m app.main
 | 方法 | 路径 | 说明 | 权限 |
 |---|---|---|---|
 | POST | /api/auth/register | 注册用户 | 公开 |
-| POST | /api/auth/login | 登录换 JWT | 公开 |
+| POST | /api/auth/login | 登录换 JWT（限流 5 次/分/IP） | 公开 |
+| POST | /api/auth/logout | 登出（token 立即失效） | 需 Bearer Token |
 | GET | /api/auth/me | 当前用户信息 | 需 Bearer Token |
 | PATCH | /api/auth/me/username | 修改用户名 | 需 Bearer Token |
-| PATCH | /api/auth/me/password | 修改密码（验旧密码） | 需 Bearer Token |
+| PATCH | /api/auth/me/password | 修改密码（验旧密码，旧 token 全失效） | 需 Bearer Token |
 | GET | /api/auth/users | 用户列表 | 仅管理员 |
+| GET | /api/products | 商品列表（Redis 缓存） | 公开 |
+| GET | /api/products/{id} | 商品详情（Redis 缓存） | 公开 |
+| POST | /api/products | 创建商品 | 仅管理员 |
+| POST | /api/orders | 下单（原子扣库存） | 需 Bearer Token |
+| GET | /api/orders | 我的订单 | 需 Bearer Token |
+| GET | /api/orders/{id} | 订单详情 | 本人/管理员 |
+| POST | /api/orders/{id}/pay | 支付 | 本人 |
+| POST | /api/orders/{id}/cancel | 取消（回补库存） | 本人 |
 | GET | /api/health | 存活检查 | 公开 |
 | GET | /api/health/db | 数据库连通性 | 公开 |
 
