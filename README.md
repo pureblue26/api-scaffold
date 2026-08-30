@@ -96,6 +96,7 @@ $env:ENVIRONMENT='test'; uv run python -m app.main
 | POST | /api/orders/{id}/refund | 退款 PAID→REFUNDED（回补库存） | 仅管理员 |
 | GET | /api/health | 存活检查 | 公开 |
 | GET | /api/health/db | 数据库连通性 | 公开 |
+| GET | /api/health/redis | Redis 连通性 | 公开 |
 
 ## 压测（locust）
 
@@ -108,6 +109,12 @@ $env:PYTHONUTF8='1'; uv run locust -f locustfile.py --headless -u 20 -r 5 -t 45s
 ```
 
 > PYTHONUTF8=1 是必须的：locust 解析 pyproject.toml 时 Windows GBK 编解码中文注释会崩。
+
+## 可观测性
+
+- 每个响应都带 `X-Request-ID` 头（客户端自带则透传，否则自动生成）
+- 所有错误响应（含 500）都返回 `request_id`，客户端可拿它反馈排查
+- 未处理异常会在服务端日志记录 request_id + 路径 + 堆栈
 
 ## 开发常用命令
 

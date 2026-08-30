@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import get_settings
+from app.core.redis import get_redis
 
 router = APIRouter(tags=["health"])
 
@@ -17,6 +18,16 @@ router = APIRouter(tags=["health"])
 async def health() -> dict:
     settings = get_settings()
     return {"status": "ok", "environment": settings.ENVIRONMENT.value}
+
+
+@router.get("/health/redis")
+async def health_redis() -> dict:
+    """Redis 连通性——认证/缓存的关键路径，它挂了系统实际不可用。"""
+    try:
+        await (await get_redis()).ping()
+        return {"status": "ok", "redis": "connected"}
+    except Exception as exc:  # noqa: BLE001 健康检查需要捕获一切失败
+        return {"status": "error", "redis": str(exc)[:200]}
 
 
 @router.get("/health/db")

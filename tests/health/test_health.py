@@ -17,3 +17,10 @@ def test_health_db_graceful(client):
     r = client.get("/api/health/db")
     assert r.status_code == 200
     assert r.json()["status"] in ("ok", "error")
+
+
+def test_health_redis(client):
+    """Redis 连通性检查（认证/缓存的关键路径）。"""
+    r = client.get("/api/health/redis")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"

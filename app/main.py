@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.redis import close_redis, init_redis
+from app.core.request_id import RequestIdMiddleware
 from app.domains.auth.router import router as auth_router
 from app.domains.health.router import router as health_router
 from app.domains.store.router import router as store_router
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
 settings = get_settings()
 app = FastAPI(title="API Scaffold", version=settings.VERSION, lifespan=lifespan)
 
+app.add_middleware(RequestIdMiddleware)  # 请求 ID：日志/响应可关联
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # 开发期允许所有来源；生产收紧为具体域名

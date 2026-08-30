@@ -65,10 +65,6 @@ async def update_product(
     return saved
 
 
-async def list_products(session: AsyncSession) -> list[Product]:
-    return await data.list_products(session)
-
-
 async def create_order(session: AsyncSession, user: User, items: list[OrderItemIn]) -> Order:
     """下单：整个订单一个事务——任何一个商品扣不动，全部回滚。
 
