@@ -1,5 +1,7 @@
 # api-scaffold
 
+[![CI](https://github.com/pureblue26/api-scaffold/actions/workflows/ci.yml/badge.svg)](https://github.com/pureblue26/api-scaffold/actions/workflows/ci.yml)
+
 FastAPI 工程脚手架：配置工程（pydantic-settings + fail-fast）、异常分类、健康检查、测试、CI 开箱即用。
 
 ## 技术栈

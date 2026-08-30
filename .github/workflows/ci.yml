@@ -7,6 +7,16 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # CI 里没有 .env.test（被 gitignore 排除），配置由环境变量注入——
+    # 这正是 12-Factor：CI/生产不携带 .env 文件，环境变量就是配置本身
+    env:
+      ENVIRONMENT: test
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: 5432
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: scaffold_test
+      JWT_SECRET: ci-only-jwt-secret-for-tests-0123456789
     services:
       postgres:
         image: postgres:16
