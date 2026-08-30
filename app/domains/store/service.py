@@ -1,0 +1,107 @@
+"""store 业务逻辑：编排 data 层的原子操作，只关心业务规则。"""
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.domains.auth.models import User
+from app.domains.store import data
+from app.domains.store.exceptions import (
+    InsufficientStockError,
+    InvalidOrderStateError,
+    OrderNotFoundError,
+    ProductNotFoundError,
+)
+from app.domains.store.models import Order, OrderItem, OrderStatus, Product
+from app.domains.store.schemas import OrderItemIn
+
+
+async def create_product(session: AsyncSession, name: str, price: int, stock: int) -> Product:
+    product = Product(name=name, price=price, stock=stock)
+    session.add(product)
+    return await data.save(session, product)
+
+
+async def list_products(session: AsyncSession) -> list[Product]:
+    return await data.list_products(session)
+
+
+async def create_order(session: AsyncSession, user: User, items: list[OrderItemIn]) -> Order:
+    """下单：整个订单一个事务——任何一个商品扣不动，全部回滚。
+
+    并发安全：不预检查库存，直接用原子扣减（条件写进 UPDATE）。
+    两个订单同时买最后一个商品时，数据库只让一个成功。
+    """
+    order_items: list[OrderItem] = []
+    total = 0
+    for item in items:
+        # 先查一次只为区分"商品不存在"和"库存不足"的报错；正确性不靠这个查询
+        product = await data.get_product_by_id(session, item.product_id)
+        if product is None:
+            await session.rollback()
+            raise ProductNotFoundError(f"商品 {item.product_id} 不存在")
+
+        product_name = product.name  # rollback 会过期已加载对象，先取值备用
+        ok = await data.deduct_stock(session, item.product_id, item.quantity)
+        if not ok:
+            await session.rollback()  # 前面扣成功的商品一起回滚
+            raise InsufficientStockError(f"商品 {product_name} 库存不足")
+
+        order_items.append(
+            OrderItem(
+                product_id=item.product_id,
+                quantity=item.quantity,
+                unit_price=product.price,  # 价格快照
+            )
+        )
+        total += product.price * item.quantity
+
+    order = Order(user_id=user.id, total_amount=total, items=order_items)
+    session.add(order)
+    return await data.save(session, order)
+
+
+async def get_order(session: AsyncSession, order_id: int, user: User) -> Order:
+    """订单详情：本人或管理员可见；他人订单当"不存在"处理（防泄露）。"""
+    order = await data.get_order_by_id(session, order_id)
+    if order is None or (order.user_id != user.id and user.role != "admin"):
+        raise OrderNotFoundError()
+    return order
+
+
+async def list_user_orders(session: AsyncSession, user_id: int) -> list[Order]:
+    return await data.list_orders_by_user(session, user_id)
+
+
+async def pay_order(session: AsyncSession, order_id: int, user: User) -> Order:
+    """支付：PENDING → PAID。简单迁移（网关回调/幂等后续再加）。"""
+    order = await get_order(session, order_id, user)
+    ok = await data.transition_order_status(
+        session, order_id, OrderStatus.PENDING.value, OrderStatus.PAID.value
+    )
+    if not ok:
+        await session.rollback()
+        raise InvalidOrderStateError("只有待支付订单可以支付")
+    await session.commit()
+    # 状态是用 Core UPDATE 改的，内存对象还是旧值；重新取一遍（带 items）
+    order = await data.get_order_by_id(session, order_id)
+    return order
+
+
+async def cancel_order(session: AsyncSession, order_id: int, user: User) -> Order:
+    """取消：PENDING → CANCELLED，并回补库存。
+
+    条件迁移保证并发安全：用户点取消的同时订单被支付了，
+    迁移失败返回 409，不会出现"已支付的订单被取消"。
+    """
+    order = await get_order(session, order_id, user)
+    ok = await data.transition_order_status(
+        session, order_id, OrderStatus.PENDING.value, OrderStatus.CANCELLED.value
+    )
+    if not ok:
+        await session.rollback()
+        raise InvalidOrderStateError("只有待支付订单可以取消")
+
+    # 回补库存（取消成功才回补，同一事务内）
+    for item in order.items:
+        await data.add_stock(session, item.product_id, item.quantity)
+    await session.commit()
+    order = await data.get_order_by_id(session, order_id)
+    return order

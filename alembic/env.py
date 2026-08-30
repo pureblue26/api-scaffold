@@ -10,7 +10,8 @@ from alembic import context
 from app.core.config import get_settings
 
 # 注册所有领域模型：导入即把表注册进 BaseModel.metadata（autogenerate 才能发现）
-from app.domains.auth import models  # noqa: F401
+from app.domains.auth import models as auth_models  # noqa: F401 注册 users 表
+from app.domains.store import models as store_models  # noqa: F401 注册 products/orders 表
 from app.models.base import BaseModel
 
 config = context.config

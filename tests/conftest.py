@@ -35,7 +35,7 @@ def client():
         async with engine.begin() as conn:
             await conn.run_sync(BaseModel.metadata.create_all)
         async with TestSession() as session:
-            await session.execute(text("TRUNCATE TABLE users RESTART IDENTITY CASCADE"))
+            await session.execute(text("TRUNCATE TABLE order_items, orders, products, users RESTART IDENTITY CASCADE"))
             await session.commit()
 
     asyncio.run(setup())

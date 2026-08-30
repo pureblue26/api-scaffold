@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.domains.auth.router import router as auth_router
 from app.domains.health.router import router as health_router
+from app.domains.store.router import router as store_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,6 +45,7 @@ register_exception_handlers(app)
 # 领域路由：每个领域一个 include_router（在 include 之前 import 该领域，
 # 其 exceptions.py 会被自动注册）
 app.include_router(auth_router, prefix="/api")
+app.include_router(store_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
 
 
