@@ -76,7 +76,7 @@ def test_invalid_transitions_rejected(client):
 
 def test_admin_only_operations(client):
     """发货/完成/退款仅管理员。"""
-    admin_headers, user_headers, pid = _setup(client)
+    _, user_headers, pid = _setup(client)
     order_id = _order(client, user_headers, pid)
     _pay(client, user_headers, order_id)
 
