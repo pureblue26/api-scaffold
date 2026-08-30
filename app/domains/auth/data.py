@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domains.auth.exceptions import DuplicateUsernameError
 from app.domains.auth.models import User
 
-
 # ---------------- 查 ----------------
 
 async def get_by_id(session: AsyncSession, user_id: int) -> User | None:
