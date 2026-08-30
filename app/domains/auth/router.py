@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.ratelimit import rate_limit
 from app.database.base import get_session
 from app.domains.auth import service
+from app.domains.auth.config import auth_settings
 from app.domains.auth.dependencies import (
     bearer_scheme,
     get_current_user,
@@ -32,7 +33,7 @@ async def register(data: UserRegister, session: AsyncSession = Depends(get_sessi
     return UserOut.model_validate(user)
 
 
-@router.post("/login", response_model=TokenOut, dependencies=[Depends(rate_limit(5, 60))])
+@router.post("/login", response_model=TokenOut, dependencies=[Depends(rate_limit(auth_settings.LOGIN_RATE_LIMIT, auth_settings.LOGIN_RATE_WINDOW))])
 async def login(data: UserLogin, session: AsyncSession = Depends(get_session)) -> TokenOut:
     """登录：用户名密码换 JWT。"""
     user = await service.authenticate(session, data.username, data.password)

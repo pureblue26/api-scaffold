@@ -22,6 +22,9 @@ class AuthSettings(BaseSettings):
     JWT_SECRET: str = "dev-only-jwt-secret"
     JWT_ALG: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 30
+    # 登录限流：同一 IP 在窗口内的登录次数（压测时可调大）
+    LOGIN_RATE_LIMIT: int = 5
+    LOGIN_RATE_WINDOW: int = 60
 
     @model_validator(mode="after")
     def _fail_fast_on_prod(self) -> "AuthSettings":

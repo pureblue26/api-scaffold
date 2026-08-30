@@ -54,6 +54,8 @@ class Settings(BaseSettings):
 
     # ---------------- Redis（全局基础设施） ----------------
     REDIS_URL: str = "redis://127.0.0.1:6380/0"
+    # 缓存总开关：压测 A/B、故障演练时关掉（关掉后读路径直接查 DB）
+    CACHE_ENABLED: bool = True
 
     @property
     def DATABASE_URL(self) -> str:

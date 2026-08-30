@@ -4,14 +4,18 @@
 - 穿透防护：loader 返回 None 也缓存空值（短 TTL），避免不存在的数据反复打 DB
 - 击穿防护：SETNX 互斥锁，热点 key 过期只让一个请求重建
 - 雪崩防护：TTL 加随机抖动，避免大量 key 同时过期
+- CACHE_ENABLED=False：读路径直查 DB（压测 A/B、故障演练用）
 """
 import asyncio
 import json
 import random
 
+from app.core.config import get_settings
 from app.core.redis import get_redis
 from app.domains.store import data
 from app.domains.store.schemas import ProductOut
+
+settings = get_settings()
 
 PRODUCTS_LIST_KEY = "store:products"
 PRODUCT_LIST_TTL = 60  # 秒
@@ -22,6 +26,10 @@ async def _get_or_set(key: str, ttl: int, loader, *, cache_none: bool = False):
 
     loader 必须返回可 JSON 序列化的数据（dict/list）。
     """
+    if not settings.CACHE_ENABLED:
+        # 缓存总开关关闭（压测 A/B / 故障演练）：直查 DB，不读不写 Redis
+        return await loader()
+
     redis = await get_redis()
     val = await redis.get(key)
     if val is not None:
@@ -36,14 +44,14 @@ async def _get_or_set(key: str, ttl: int, loader, *, cache_none: bool = False):
         return json.loads(val) if val else None
 
     try:
-        data = await loader()
-        if data is None:
+        data_out = await loader()
+        if data_out is None:
             if cache_none:
                 await redis.set(key, "", ex=ttl)  # 穿透防护：空值也缓存
             return None
         # 雪崩防护：TTL 加随机抖动
-        await redis.set(key, json.dumps(data), ex=ttl + random.randint(0, 30))
-        return data
+        await redis.set(key, json.dumps(data_out), ex=ttl + random.randint(0, 30))
+        return data_out
     finally:
         await redis.delete(lock_key)
 

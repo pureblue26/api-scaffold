@@ -93,6 +93,18 @@ $env:ENVIRONMENT='test'; uv run python -m app.main
 | GET | /api/health | 存活检查 | 公开 |
 | GET | /api/health/db | 数据库连通性 | 公开 |
 
+## 压测（locust）
+
+```bash
+# 1. 启动服务（限流调大，避免压测被登录限流干扰）
+$env:LOGIN_RATE_LIMIT='10000'; uv run python -m app.main
+# 2. 跑压测（45 秒，20 用户）
+$env:PYTHONUTF8='1'; uv run locust -f locustfile.py --headless -u 20 -r 5 -t 45s --only-summary --host http://127.0.0.1:8000
+# 3. A/B 对比缓存收益：CACHE_ENABLED=false 重启服务再压一遍
+```
+
+> PYTHONUTF8=1 是必须的：locust 解析 pyproject.toml 时 Windows GBK 编解码中文注释会崩。
+
 ## 开发常用命令
 
 ```bash
