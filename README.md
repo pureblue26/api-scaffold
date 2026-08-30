@@ -163,6 +163,7 @@ PENDING ──支付──▶ PAID ──发货──▶ SHIPPED ──完成─
 | GET | /api/health | 存活检查 | 公开 |
 | GET | /api/health/db | 数据库连通性 | 公开 |
 | GET | /api/health/redis | Redis 连通性 | 公开 |
+| GET | /api/metrics | Prometheus 指标（RED：请求率/错误/耗时） | 公开 |
 
 ## 压测（locust）
 
@@ -178,9 +179,10 @@ $env:PYTHONUTF8='1'; uv run locust -f locustfile.py --headless -u 20 -r 5 -t 45s
 
 ## 可观测性
 
-- 每个响应都带 `X-Request-ID` 头（客户端自带则透传，否则自动生成）
-- 所有错误响应（含 500）都返回 `request_id`，客户端可拿它反馈排查
-- 未处理异常会在服务端日志记录 request_id + 路径 + 堆栈
+- **指标（RED）**：`GET /api/metrics` 输出 Prometheus 指标——请求率、状态码分布（错误）、耗时直方图；路径自动归一化（`/api/orders/123` → `/api/orders/{order_id}`）避免高基数标签
+- **JSON 结构化日志**：每行一个 JSON（ts/level/logger/request_id/message），可机读查询（ELK/Loki）
+- **request-id 全链路**：响应头 + 错误响应 + 日志自动注入（contextvar），一条请求的日志可按 request_id 聚合
+- 未处理异常：日志记录 request_id + 路径 + 堆栈，响应返回 request_id
 
 ## 开发常用命令
 

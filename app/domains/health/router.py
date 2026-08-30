@@ -5,6 +5,8 @@
 健康检查只需 router.py 一个文件。
 """
 from fastapi import APIRouter
+from fastapi.responses import Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -18,6 +20,12 @@ router = APIRouter(tags=["health"])
 async def health() -> dict:
     settings = get_settings()
     return {"status": "ok", "environment": settings.ENVIRONMENT.value}
+
+
+@router.get("/metrics")
+async def metrics() -> Response:
+    """Prometheus 指标：供 Prometheus 抓取（RED：请求率/错误/耗时）。"""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @router.get("/health/redis")
