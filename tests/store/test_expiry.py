@@ -36,7 +36,7 @@ def _expire_order(client, order_id):
 
 def test_pay_expired_order_rejected_and_restocked(client):
     """超时防线：过期的 PENDING 订单不能支付，自动取消 + 回补库存。"""
-    admin_headers, user_headers, pid = _setup(client, stock=5)
+    _, user_headers, pid = _setup(client, stock=5)
     order_id = _create_order(client, user_headers, pid, quantity=2).json()["id"]
     _expire_order(client, order_id)
 
@@ -51,7 +51,7 @@ def test_pay_expired_order_rejected_and_restocked(client):
 
 def test_sweeper_cancels_expired_and_restocks(client):
     """后台清扫：超时 PENDING 订单被取消，库存回补。"""
-    admin_headers, user_headers, pid = _setup(client, stock=5)
+    _, user_headers, pid = _setup(client, stock=5)
     order_id = _create_order(client, user_headers, pid, quantity=2).json()["id"]
     _expire_order(client, order_id)
     assert client.get(f"/api/products/{pid}").json()["stock"] == 3  # 扣了还没回补
