@@ -100,4 +100,5 @@ uv run ruff check .          # 代码检查
 uv run pytest                # 跑测试
 uv run alembic revision --autogenerate -m "描述"   # 生成迁移
 uv run alembic upgrade head  # 应用迁移
+uv run python -m app.seed --password <密码>   # 初始化管理员（幂等）
 ```
