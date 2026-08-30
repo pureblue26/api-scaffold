@@ -20,11 +20,20 @@ from app.models.base import BaseModel
 
 
 class OrderStatus(str, Enum):
-    """订单状态机：只允许图上的迁移，其他一律 409。"""
+    """订单状态机：只允许图上的迁移，其他一律 409。
 
-    PENDING = "pending"    # 待支付
-    PAID = "paid"          # 已支付
+    PENDING ─支付▶ PAID ─发货▶ SHIPPED ─完成▶ COMPLETED
+       │                │
+       └─取消▶ CANCELLED   └─退款▶ REFUNDED
+       （回补库存）         （回补库存）
+    """
+
+    PENDING = "pending"      # 待支付
+    PAID = "paid"            # 已支付
+    SHIPPED = "shipped"      # 已发货
+    COMPLETED = "completed"  # 已完成
     CANCELLED = "cancelled"  # 已取消（回补库存）
+    REFUNDED = "refunded"    # 已退款（回补库存）
 
 
 class Product(BaseModel):

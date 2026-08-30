@@ -124,26 +124,76 @@ async def pay_order(session: AsyncSession, order_id: int, user: User) -> Order:
     return order
 
 
-async def cancel_order(session: AsyncSession, order_id: int, user: User) -> Order:
-    """取消：PENDING → CANCELLED，并回补库存。
+async def _restock_order(
+    session: AsyncSession,
+    order_id: int,
+    user: User,
+    from_status: OrderStatus,
+    to_status: OrderStatus,
+    error_msg: str,
+) -> Order:
+    """取消/退款的公共逻辑：条件迁移 + 回补库存 + 失效详情缓存。
 
-    条件迁移保证并发安全：用户点取消的同时订单被支付了，
-    迁移失败返回 409，不会出现"已支付的订单被取消"。
+    cancel（PENDING→CANCELLED）和 refund（PAID→REFUNDED）是同构的，
+    只差"从哪个状态出发"，所以抽成一个助手。
     """
     order = await get_order(session, order_id, user)
     ok = await data.transition_order_status(
-        session, order_id, OrderStatus.PENDING.value, OrderStatus.CANCELLED.value
+        session, order_id, from_status.value, to_status.value
     )
     if not ok:
         await session.rollback()
-        raise InvalidOrderStateError("只有待支付订单可以取消")
+        raise InvalidOrderStateError(error_msg)
 
-    # 回补库存（取消成功才回补，同一事务内）
+    # 回补库存（迁移成功才回补，同一事务内）
     for item in order.items:
         await data.add_stock(session, item.product_id, item.quantity)
     await session.commit()
     order = await data.get_order_by_id(session, order_id)
-    # 同下单：只失效详情缓存，列表靠 TTL
     for item in order.items:
-        await cache.invalidate_product(item.product_id)
+        await cache.invalidate_product(item.product_id)  # 详情缓存失效，列表靠 TTL
     return order
+
+
+async def cancel_order(session: AsyncSession, order_id: int, user: User) -> Order:
+    """取消：PENDING → CANCELLED，回补库存。"""
+    return await _restock_order(
+        session, order_id, user,
+        OrderStatus.PENDING, OrderStatus.CANCELLED,
+        "只有待支付订单可以取消",
+    )
+
+
+async def refund_order(session: AsyncSession, order_id: int, user: User) -> Order:
+    """退款：PAID → REFUNDED，回补库存（已支付订单的"撤销"）。"""
+    return await _restock_order(
+        session, order_id, user,
+        OrderStatus.PAID, OrderStatus.REFUNDED,
+        "只有已支付订单可以退款",
+    )
+
+
+async def ship_order(session: AsyncSession, order_id: int, user: User) -> Order:
+    """发货：PAID → SHIPPED（管理员）。库存保持扣减状态。"""
+    order = await get_order(session, order_id, user)
+    ok = await data.transition_order_status(
+        session, order_id, OrderStatus.PAID.value, OrderStatus.SHIPPED.value
+    )
+    if not ok:
+        await session.rollback()
+        raise InvalidOrderStateError("只有已支付订单可以发货")
+    await session.commit()
+    return await data.get_order_by_id(session, order_id)
+
+
+async def complete_order(session: AsyncSession, order_id: int, user: User) -> Order:
+    """完成：SHIPPED → COMPLETED（管理员）。"""
+    order = await get_order(session, order_id, user)
+    ok = await data.transition_order_status(
+        session, order_id, OrderStatus.SHIPPED.value, OrderStatus.COMPLETED.value
+    )
+    if not ok:
+        await session.rollback()
+        raise InvalidOrderStateError("只有已发货订单可以完成")
+    await session.commit()
+    return await data.get_order_by_id(session, order_id)

@@ -122,3 +122,35 @@ async def cancel_order(
     current_user: User = Depends(get_current_user),
 ) -> OrderOut:
     return OrderOut.model_validate(await service.cancel_order(session, order_id, current_user))
+
+
+# ---------------- 订单状态机（管理员操作） ----------------
+
+@router.post("/orders/{order_id}/ship", response_model=OrderOut)
+async def ship_order(
+    order_id: int,
+    session: AsyncSession = Depends(get_session),
+    admin: User = Depends(require_admin),
+) -> OrderOut:
+    """发货：PAID → SHIPPED（仅管理员）。"""
+    return OrderOut.model_validate(await service.ship_order(session, order_id, admin))
+
+
+@router.post("/orders/{order_id}/complete", response_model=OrderOut)
+async def complete_order(
+    order_id: int,
+    session: AsyncSession = Depends(get_session),
+    admin: User = Depends(require_admin),
+) -> OrderOut:
+    """完成：SHIPPED → COMPLETED（仅管理员）。"""
+    return OrderOut.model_validate(await service.complete_order(session, order_id, admin))
+
+
+@router.post("/orders/{order_id}/refund", response_model=OrderOut)
+async def refund_order(
+    order_id: int,
+    session: AsyncSession = Depends(get_session),
+    admin: User = Depends(require_admin),
+) -> OrderOut:
+    """退款：PAID → REFUNDED，回补库存（仅管理员）。"""
+    return OrderOut.model_validate(await service.refund_order(session, order_id, admin))

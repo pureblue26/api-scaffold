@@ -90,7 +90,10 @@ $env:ENVIRONMENT='test'; uv run python -m app.main
 | GET | /api/orders | 我的订单 | 需 Bearer Token |
 | GET | /api/orders/{id} | 订单详情 | 本人/管理员 |
 | POST | /api/orders/{id}/pay | 支付 | 本人 |
-| POST | /api/orders/{id}/cancel | 取消（回补库存） | 本人 |
+| POST | /api/orders/{id}/cancel | 取消 PENDING→CANCELLED（回补库存） | 本人 |
+| POST | /api/orders/{id}/ship | 发货 PAID→SHIPPED | 仅管理员 |
+| POST | /api/orders/{id}/complete | 完成 SHIPPED→COMPLETED | 仅管理员 |
+| POST | /api/orders/{id}/refund | 退款 PAID→REFUNDED（回补库存） | 仅管理员 |
 | GET | /api/health | 存活检查 | 公开 |
 | GET | /api/health/db | 数据库连通性 | 公开 |
 
