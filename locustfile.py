@@ -64,4 +64,4 @@ class StoreUser(HttpUser):
             catch_response=True,
         ) as resp:
             if resp.status_code != 201:
-                resp.failure(f"HTTP {resp.status_code}: {resp.text[:150]}")
+                resp.failure(f"HTTP {resp.status_code} pid={product['id']}: {resp.text[:120]}")

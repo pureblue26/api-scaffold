@@ -44,7 +44,7 @@ async def create_order(session: AsyncSession, user: User, items: list[OrderItemI
         ok = await data.deduct_stock(session, item.product_id, item.quantity)
         if not ok:
             await session.rollback()  # 前面扣成功的商品一起回滚
-            raise InsufficientStockError(f"商品 {product_name} 库存不足")
+            raise InsufficientStockError(f"商品 {item.product_id}（{product_name}）库存不足")
 
         order_items.append(
             OrderItem(
