@@ -1,4 +1,9 @@
-"""健康检查：liveness（进程活着）与 DB 连通性。"""
+"""健康检查领域：liveness 与 DB 连通性。
+
+这是领域结构的示范：业务领域在 app/domains/ 下自包含，
+按需创建 router / schemas / models / dependencies / service / exceptions。
+健康检查只需 router.py 一个文件。
+"""
 from fastapi import APIRouter
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine

@@ -32,21 +32,25 @@ uv run uvicorn app.main:app --reload
 
 ```
 app/
-  main.py            # 入口：装配配置、异常、路由
+  main.py               # 入口：装配全局 + 各领域路由
   core/
-    config.py        # 环境配置（环境变量 > .env.<ENV> > 默认值 + 生产 fail-fast）
-    exceptions.py    # 业务异常分类（NotFound/Conflict/... 自动映射 HTTP 状态码）
-  api/
-    health.py        # /api/health 与 /api/health/db
-    router.py        # 路由聚合：新增业务模块 include_router 进来
+    config.py           # 全局配置（环境变量 > .env.<ENV> > 默认值 + 生产 fail-fast）
+    exceptions.py       # 全局异常基类 AppError（领域异常继承它，自动注册）
+    paths.py
   database/
-    base.py          # 引擎/会话工厂 + get_session 依赖
-  models/            # ORM 模型（继承 models/base.py 的 BaseModel）
-  services/          # 业务逻辑
-  schemas/           # Pydantic 请求/响应模型
-tests/               # pytest（NullPool 测试引擎）
-alembic/             # 数据库迁移
-.github/workflows/   # CI
+    base.py             # 引擎/会话工厂 + get_session 依赖
+  models/
+    base.py             # ORM 基类 BaseModel（领域模型继承它）
+  domains/              # ★ 领域层：一个业务领域一个自包含文件夹
+    health/             # 示范领域（健康检查）
+      router.py
+    README.md           # 领域层规则与接入流程
+tests/
+  conftest.py           # pytest 共享（NullPool 测试引擎）
+  health/
+    test_health.py      # 测试按领域镜像组织
+alembic/                # 数据库迁移
+.github/workflows/      # CI
 ```
 
 ## 环境配置机制

@@ -1,4 +1,4 @@
-"""应用入口：装配配置、异常处理、路由。"""
+"""应用入口：装配全局（配置/异常/数据库）与各领域路由。"""
 import logging
 from contextlib import asynccontextmanager
 
@@ -6,9 +6,9 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
+from app.domains.health.router import router as health_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +39,10 @@ app.add_middleware(
 )
 
 register_exception_handlers(app)
-app.include_router(api_router)
+
+# 领域路由：每个领域一个 include_router（在 include 之前 import 该领域，
+# 其 exceptions.py 会被自动注册）
+app.include_router(health_router, prefix="/api")
 
 
 @app.get("/")
