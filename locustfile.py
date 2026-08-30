@@ -63,5 +63,8 @@ class StoreUser(HttpUser):
             headers=self.headers,
             catch_response=True,
         ) as resp:
-            if resp.status_code != 201:
+            if resp.status_code == 409:
+                # 设计内行为：列表缓存库存滞后，DB 原子扣减安全拒绝（不超卖）
+                resp.success()
+            elif resp.status_code != 201:
                 resp.failure(f"HTTP {resp.status_code} pid={product['id']}: {resp.text[:120]}")
