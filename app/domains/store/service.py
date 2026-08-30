@@ -105,8 +105,10 @@ async def get_order(session: AsyncSession, order_id: int, user: User) -> Order:
     return order
 
 
-async def list_user_orders(session: AsyncSession, user_id: int) -> list[Order]:
-    return await data.list_orders_by_user(session, user_id)
+async def list_user_orders(
+    session: AsyncSession, user_id: int, limit: int, offset: int
+) -> tuple[list[Order], int]:
+    return await data.list_orders_by_user(session, user_id, limit, offset)
 
 
 async def pay_order(session: AsyncSession, order_id: int, user: User) -> Order:

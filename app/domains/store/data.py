@@ -40,14 +40,25 @@ async def get_order_by_id(session: AsyncSession, order_id: int) -> Order | None:
     )
 
 
-async def list_orders_by_user(session: AsyncSession, user_id: int) -> list[Order]:
+async def list_orders_by_user(
+    session: AsyncSession, user_id: int, limit: int, offset: int
+) -> tuple[list[Order], int]:
+    """用户订单分页：返回（当前页订单, 总条数），最新在前。
+
+    订单是私有数据且频繁变动，故意不走缓存（见 router 注释）。
+    """
+    total = await session.scalar(
+        select(func.count()).select_from(Order).where(Order.user_id == user_id)
+    ) or 0
     result = await session.scalars(
         select(Order)
         .options(selectinload(Order.items))
         .where(Order.user_id == user_id)
         .order_by(Order.id.desc())
+        .limit(limit)
+        .offset(offset)
     )
-    return list(result)
+    return list(result), total
 
 
 # ---------------- 改（并发安全的原子操作） ----------------

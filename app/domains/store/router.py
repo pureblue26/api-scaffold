@@ -89,12 +89,30 @@ async def create_order(
     return OrderOut.model_validate(order)
 
 
-@router.get("/orders", response_model=list[OrderOut])
+@router.get("/orders", response_model=PageOut[OrderOut])
 async def my_orders(
+    limit: int = Query(default=20, ge=1, le=100, description="每页条数"),
+    offset: int = Query(default=0, ge=0, description="跳过条数"),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
-) -> list[OrderOut]:
-    return [OrderOut.model_validate(o) for o in await service.list_user_orders(session, current_user.id)]
+) -> PageOut[OrderOut]:
+    """我的订单（分页）。
+
+    注意：订单【不走缓存】——和商品列表相反。原因：
+    1. 私有数据：每个用户只看自己的，缓存命中率天然低
+    2. 频繁变动：下单/支付/取消都改它，缓存失效成本高
+    3. 正确性敏感：订单状态必须实时，不能容忍"滞后"
+    缓存不是万能的——读多写少才值得缓存。
+    """
+    orders, total = await service.list_user_orders(session, current_user.id, limit, offset)
+    items = [OrderOut.model_validate(o) for o in orders]
+    return PageOut(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + len(items) < total,
+    )
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut)

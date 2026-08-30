@@ -87,7 +87,7 @@ $env:ENVIRONMENT='test'; uv run python -m app.main
 | POST | /api/products | 创建商品 | 仅管理员 |
 | PATCH | /api/products/{id} | 修改商品（名称/价格/库存） | 仅管理员 |
 | POST | /api/orders | 下单（原子扣库存） | 需 Bearer Token |
-| GET | /api/orders | 我的订单 | 需 Bearer Token |
+| GET | /api/orders | 我的订单（分页，不走缓存） | 需 Bearer Token |
 | GET | /api/orders/{id} | 订单详情 | 本人/管理员 |
 | POST | /api/orders/{id}/pay | 支付 | 本人 |
 | POST | /api/orders/{id}/cancel | 取消 PENDING→CANCELLED（回补库存） | 本人 |
