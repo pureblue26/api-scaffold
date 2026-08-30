@@ -49,9 +49,9 @@ async def main() -> None:
         user = await create_admin(session, args.username, args.password)
 
     if user:
-        print(f"✅ 管理员 {args.username} 创建成功（role=admin）")
+        print(f"[OK] 管理员 {args.username} 创建成功（role=admin）")
     else:
-        print(f"ℹ️  用户名 {args.username} 已存在，跳过（如需重置密码请手动处理）")
+        print(f"[SKIP] 用户名 {args.username} 已存在，跳过（如需重置密码请手动处理）")
 
 
 if __name__ == "__main__":
