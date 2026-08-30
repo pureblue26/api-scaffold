@@ -109,7 +109,8 @@ def test_cancel_order_restocks(client):
     r = client.post(f"/api/orders/{order_id}/cancel", headers=user_headers)
     assert r.status_code == 200
     assert r.json()["status"] == "cancelled"
-    assert client.get("/api/products").json()["items"][0]["stock"] == 5  # 回补
+    # 详情接口永远新鲜（列表缓存允许滞后）
+    assert client.get(f"/api/products/{product['id']}").json()["stock"] == 5  # 回补
 
 
 def test_cancel_after_pay_rejected(client):

@@ -175,7 +175,7 @@ async def refund_order(session: AsyncSession, order_id: int, user: User) -> Orde
 
 async def ship_order(session: AsyncSession, order_id: int, user: User) -> Order:
     """发货：PAID → SHIPPED（管理员）。库存保持扣减状态。"""
-    order = await get_order(session, order_id, user)
+    await get_order(session, order_id, user)  # 所有权/存在性检查
     ok = await data.transition_order_status(
         session, order_id, OrderStatus.PAID.value, OrderStatus.SHIPPED.value
     )
@@ -188,7 +188,7 @@ async def ship_order(session: AsyncSession, order_id: int, user: User) -> Order:
 
 async def complete_order(session: AsyncSession, order_id: int, user: User) -> Order:
     """完成：SHIPPED → COMPLETED（管理员）。"""
-    order = await get_order(session, order_id, user)
+    await get_order(session, order_id, user)  # 所有权/存在性检查
     ok = await data.transition_order_status(
         session, order_id, OrderStatus.SHIPPED.value, OrderStatus.COMPLETED.value
     )

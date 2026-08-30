@@ -23,8 +23,9 @@ def _pay(client, user_headers, order_id):
     return client.post(f"/api/orders/{order_id}/pay", headers=user_headers)
 
 
-def _stock(client):
-    return client.get("/api/products").json()["items"][0]["stock"]
+def _stock(client, product_id):
+    # 断言"当前库存"必须走详情接口：列表缓存允许滞后（设计），详情永远新鲜
+    return client.get(f"/api/products/{product_id}").json()["stock"]
 
 
 def test_full_state_machine_flow(client):
@@ -47,12 +48,12 @@ def test_refund_restocks_inventory(client):
     """退款：PAID→REFUNDED，库存回补（和取消同构）。"""
     admin_headers, user_headers, pid = _setup(client, stock=5)
     order_id = _order(client, user_headers, pid, qty=2)
-    assert _stock(client) == 3  # 5-2
+    assert _stock(client, pid) == 3  # 5-2
 
     _pay(client, user_headers, order_id)
     r = client.post(f"/api/orders/{order_id}/refund", headers=admin_headers)
     assert r.json()["status"] == "refunded"
-    assert _stock(client) == 5  # 回补
+    assert _stock(client, pid) == 5  # 回补
 
 
 def test_invalid_transitions_rejected(client):
