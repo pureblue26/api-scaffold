@@ -1,6 +1,10 @@
 """store 业务逻辑：编排 data 层的原子操作，只关心业务规则。"""
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.domains.auth.models import User
 from app.domains.store import cache, data
 from app.domains.store.exceptions import (
@@ -11,6 +15,14 @@ from app.domains.store.exceptions import (
 )
 from app.domains.store.models import Order, OrderItem, OrderStatus, Product
 from app.domains.store.schemas import OrderItemIn
+
+settings = get_settings()
+
+
+def _is_expired(order: Order) -> bool:
+    """订单是否超过支付时限（只对 PENDING 有意义）。"""
+    timeout = timedelta(minutes=settings.ORDER_TIMEOUT_MINUTES)
+    return order.created_at + timeout < datetime.now(UTC)
 
 
 async def create_product(session: AsyncSession, name: str, price: int, stock: int) -> Product:
@@ -91,7 +103,6 @@ async def create_order(session: AsyncSession, user: User, items: list[OrderItemI
     saved = await data.save(session, order)
     # 库存变了：只失效涉及商品的【详情】缓存（决策页必须精确）。
     # 【列表】缓存不失效——靠 TTL 自然过期，避免下单风暴反复重建列表
-    # （压测实测：每次下单都删列表 → 重建尖峰 → P95 恶化）
     for item in order_items:
         await cache.invalidate_product(item.product_id)
     return saved
@@ -112,8 +123,18 @@ async def list_user_orders(
 
 
 async def pay_order(session: AsyncSession, order_id: int, user: User) -> Order:
-    """支付：PENDING → PAID。简单迁移（网关回调/幂等后续再加）。"""
+    """支付：PENDING → PAID。
+
+    超时防线：过期的 PENDING 订单【不能支付】——先自动取消（回补库存）
+    再拒绝。防止"30 分钟后回来，订单已超时却支付成功"。
+    """
     order = await get_order(session, order_id, user)
+    if order.status == OrderStatus.PENDING.value and _is_expired(order):
+        await _restock_order_core(
+        session, order, OrderStatus.PENDING, OrderStatus.CANCELLED, "订单已超时取消"
+    )
+        raise InvalidOrderStateError("订单已超时取消，无法支付")
+
     ok = await data.transition_order_status(
         session, order_id, OrderStatus.PENDING.value, OrderStatus.PAID.value
     )
@@ -121,37 +142,33 @@ async def pay_order(session: AsyncSession, order_id: int, user: User) -> Order:
         await session.rollback()
         raise InvalidOrderStateError("只有待支付订单可以支付")
     await session.commit()
-    # 状态是用 Core UPDATE 改的，内存对象还是旧值；重新取一遍（带 items）
-    order = await data.get_order_by_id(session, order_id)
-    return order
+    return await data.get_order_by_id(session, order_id)
 
 
-async def _restock_order(
+async def _restock_order_core(
     session: AsyncSession,
-    order_id: int,
-    user: User,
+    order: Order,
     from_status: OrderStatus,
     to_status: OrderStatus,
     error_msg: str,
 ) -> Order:
-    """取消/退款的公共逻辑：条件迁移 + 回补库存 + 失效详情缓存。
+    """取消/退款/超时清理的公共核心：条件迁移 + 回补库存 + 失效详情缓存。
 
-    cancel（PENDING→CANCELLED）和 refund（PAID→REFUNDED）是同构的，
-    只差"从哪个状态出发"，所以抽成一个助手。
+    前提：调用方已持有 Order 对象并完成所有权/存在性检查。
+    from_status 必须【显式传入】，不能信 order.status——
+    否则 cancel 会把 paid 订单也取消（状态机约束被破坏，测试抓到过）。
     """
-    order = await get_order(session, order_id, user)
     ok = await data.transition_order_status(
-        session, order_id, from_status.value, to_status.value
+        session, order.id, from_status.value, to_status.value
     )
     if not ok:
         await session.rollback()
         raise InvalidOrderStateError(error_msg)
 
-    # 回补库存（迁移成功才回补，同一事务内）
     for item in order.items:
         await data.add_stock(session, item.product_id, item.quantity)
     await session.commit()
-    order = await data.get_order_by_id(session, order_id)
+    order = await data.get_order_by_id(session, order.id)
     for item in order.items:
         await cache.invalidate_product(item.product_id)  # 详情缓存失效，列表靠 TTL
     return order
@@ -159,19 +176,17 @@ async def _restock_order(
 
 async def cancel_order(session: AsyncSession, order_id: int, user: User) -> Order:
     """取消：PENDING → CANCELLED，回补库存。"""
-    return await _restock_order(
-        session, order_id, user,
-        OrderStatus.PENDING, OrderStatus.CANCELLED,
-        "只有待支付订单可以取消",
+    order = await get_order(session, order_id, user)  # 所有权/存在性检查
+    return await _restock_order_core(
+        session, order, OrderStatus.PENDING, OrderStatus.CANCELLED, "只有待支付订单可以取消"
     )
 
 
 async def refund_order(session: AsyncSession, order_id: int, user: User) -> Order:
     """退款：PAID → REFUNDED，回补库存（已支付订单的"撤销"）。"""
-    return await _restock_order(
-        session, order_id, user,
-        OrderStatus.PAID, OrderStatus.REFUNDED,
-        "只有已支付订单可以退款",
+    order = await get_order(session, order_id, user)
+    return await _restock_order_core(
+        session, order, OrderStatus.PAID, OrderStatus.REFUNDED, "只有已支付订单可以退款"
     )
 
 
@@ -199,3 +214,32 @@ async def complete_order(session: AsyncSession, order_id: int, user: User) -> Or
         raise InvalidOrderStateError("只有已发货订单可以完成")
     await session.commit()
     return await data.get_order_by_id(session, order_id)
+
+
+async def cancel_expired(session: AsyncSession) -> int:
+    """取消所有超时的 PENDING 订单（回补库存），返回处理数量。
+
+    由后台任务周期性调用；幂等——并发下已处理的订单条件迁移失败会被跳过。
+    """
+    cutoff = datetime.now(UTC) - timedelta(minutes=settings.ORDER_TIMEOUT_MINUTES)
+    expired_ids = list(
+        await session.scalars(
+            select(Order.id).where(
+                Order.status == OrderStatus.PENDING.value,
+                Order.created_at < cutoff,
+            )
+        )
+    )
+    count = 0
+    for order_id in expired_ids:
+        order = await data.get_order_by_id(session, order_id)
+        if order is None:
+            continue
+        try:
+            await _restock_order_core(
+        session, order, OrderStatus.PENDING, OrderStatus.CANCELLED, "订单已超时"
+    )
+            count += 1
+        except InvalidOrderStateError:
+            pass  # 并发下已被用户取消/其他清扫处理，跳过
+    return count

@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     # 缓存总开关：压测 A/B、故障演练时关掉（关掉后读路径直接查 DB）
     CACHE_ENABLED: bool = True
 
+    # ---------------- store 领域业务规则 ----------------
+    ORDER_TIMEOUT_MINUTES: int = 30  # 待支付订单超时自动取消时限
+
     @property
     def DATABASE_URL(self) -> str:
         """SQLAlchemy 异步连接串（密码含 @ : / 等特殊字符也能正确拼装）。"""

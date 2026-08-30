@@ -1,4 +1,5 @@
 """应用入口：装配全局（配置/异常/数据库）与各领域路由。"""
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -12,6 +13,7 @@ from app.core.redis import close_redis, init_redis
 from app.domains.auth.router import router as auth_router
 from app.domains.health.router import router as health_router
 from app.domains.store.router import router as store_router
+from app.domains.store.tasks import order_expiry_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,7 +30,11 @@ async def lifespan(app: FastAPI):
     logger.info("数据库: %s", settings.DATABASE_URL)
     await init_redis()
     logger.info("Redis: %s", settings.REDIS_URL)
+    # 订单超时自动取消后台任务
+    expiry_task = asyncio.create_task(order_expiry_loop())
+    logger.info("订单超时清扫任务已启动（间隔 60s）")
     yield
+    expiry_task.cancel()
     logger.info("应用关闭")
     await close_redis()
 
