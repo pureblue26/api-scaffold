@@ -45,6 +45,7 @@ class ProductOut(BaseModel):
     name: str
     price: int
     stock: int
+    is_active: bool = True  # 默认 True：兼容升级前缓存的旧数据
 
 
 class OrderItemIn(BaseModel):
