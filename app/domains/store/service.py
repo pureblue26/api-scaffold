@@ -27,7 +27,7 @@ def _is_expired(order: Order) -> bool:
 
 
 async def create_product(session: AsyncSession, name: str, price: int, stock: int) -> Product:
-    product = Product(name=name, price=price, stock=stock)
+    product = Product(name=name, price=price, stock=stock, shelved_at=datetime.now(UTC))
     session.add(product)
     saved = await data.save(session, product)
     await cache.invalidate_products()  # 缓存失效：新商品立即可见

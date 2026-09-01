@@ -45,6 +45,12 @@ class Product(BaseModel):
     price: Mapped[int] = mapped_column(Integer, nullable=False)  # 单位：分
     stock: Mapped[int] = mapped_column(Integer, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)  # 上架状态
+    created_at: Mapped[datetime] = mapped_column(  # 创建时间（与 User/Order 保持一致）
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    shelved_at: Mapped[datetime | None] = mapped_column(  # 上架时间（null = 从未上架）
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         # 不变式 1：库存永远 >= 0，数据库兜底

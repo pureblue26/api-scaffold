@@ -17,8 +17,10 @@
 【你的任务】实现下面两个函数（签名已定，实现是你写）：
 """
 
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.store import cache, data
 from app.domains.store.models import Product
 
 
@@ -35,8 +37,13 @@ async def set_product_active(
     - 失效列表缓存:  await cache.invalidate_products()
     - 失效详情缓存:  await cache.invalidate_product(product_id)
     """
-    # TODO: 你的实现
-
+    product = await data.get_product_by_id(session, product_id)
+    if product:
+        product = session.execute(update(Product).where(Product.id == product_id).values({Product.is_active: is_active}))
+        await data.save(session, product)
+        await cache.invalidate_products()
+        await cache.invalidate_product(product_id)
+    return product
 
 async def list_active_products(
     session: AsyncSession, limit: int, offset: int
@@ -48,4 +55,7 @@ async def list_active_products(
     - 总数:  select(func.count()).select_from(Product).where(...)
     - 当前页: select(Product).where(...).order_by(Product.id).limit(limit).offset(offset)
     """
-    # TODO: 你的实现
+    total  = await session.scalar(select(func.count()).select_from(Product).where(is_active=True))
+    result = await session.scalar(select(Product).order_by(Product.id).limit(limit).offset(offset))
+    return tuple(result),total
+
