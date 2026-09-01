@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.base import get_session
 from app.domains.auth.dependencies import get_current_user, require_admin
 from app.domains.auth.models import User
-from app.domains.store import cache, service
-from app.domains.store.exceptions import ProductNotFoundError
+from app.domains.store import cache, onshelf, service
+from app.domains.store.exceptions import ProductDelistedError, ProductNotFoundError
 from app.domains.store.schemas import (
     OrderCreate,
     OrderOut,
@@ -45,8 +45,36 @@ async def products(
 async def product_detail(
     product_id: int, session: AsyncSession = Depends(get_session)
 ) -> ProductOut:
-    """商品详情（走 Redis 缓存，miss 才查 DB）。"""
+    """商品详情（走 Redis 缓存；已下架返回 410，命中缓存标记时不查库）。"""
     product = await cache.get_product_cached(session, product_id)
+    if product == cache.DELISTED:
+        raise ProductDelistedError()  # 410：已下架
+    if product is None:
+        raise ProductNotFoundError()
+    return ProductOut.model_validate(product)
+
+
+@router.post("/products/{product_id}/delist", response_model=ProductOut)
+async def delist_product(
+    product_id: int,
+    session: AsyncSession = Depends(get_session),
+    admin: User = Depends(require_admin),
+) -> ProductOut:
+    """下架商品（仅管理员）：从列表消失，详情返回 410。"""
+    product = await onshelf.set_product_active(session, product_id, False)
+    if product is None:
+        raise ProductNotFoundError()
+    return ProductOut.model_validate(product)
+
+
+@router.post("/products/{product_id}/relist", response_model=ProductOut)
+async def relist_product(
+    product_id: int,
+    session: AsyncSession = Depends(get_session),
+    admin: User = Depends(require_admin),
+) -> ProductOut:
+    """上架商品（仅管理员）：回到列表，详情恢复正常。"""
+    product = await onshelf.set_product_active(session, product_id, True)
     if product is None:
         raise ProductNotFoundError()
     return ProductOut.model_validate(product)

@@ -7,6 +7,13 @@ class ProductNotFoundError(AppError):
     detail = "商品不存在"
 
 
+class ProductDelistedError(AppError):
+    """商品已下架。410 Gone：HTTP 规范里"资源曾经可用，现在永久不可用"。"""
+
+    status_code = 410
+    detail = "商品已下架"
+
+
 class InsufficientStockError(AppError):
     """库存不足：并发下单时靠原子扣减触发，不是预检查。"""
 

@@ -149,9 +149,11 @@ PENDING ──支付──▶ PAID ──发货──▶ SHIPPED ──完成─
 | PATCH | /api/auth/me/password | 修改密码（旧 token 全失效） | 需 Bearer Token |
 | GET | /api/auth/users | 用户列表 | 仅管理员 |
 | GET | /api/products?limit&offset | 商品列表（缓存 + 分页） | 公开 |
-| GET | /api/products/{id} | 商品详情（缓存） | 公开 |
+| GET | /api/products/{id} | 商品详情（缓存；已下架 410） | 公开 |
 | POST | /api/products | 创建商品 | 仅管理员 |
 | PATCH | /api/products/{id} | 修改商品 | 仅管理员 |
+| POST | /api/products/{id}/delist | 下架（列表消失，详情 410） | 仅管理员 |
+| POST | /api/products/{id}/relist | 上架（恢复，记录上架时间） | 仅管理员 |
 | POST | /api/orders | 下单（原子扣库存） | 需 Bearer Token |
 | GET | /api/orders?limit&offset | 我的订单（分页，不缓存） | 需 Bearer Token |
 | GET | /api/orders/{id} | 订单详情 | 本人/管理员 |

@@ -22,9 +22,15 @@ async def list_products(
 
     LIMIT/OFFSET + 主键索引：只读一页，不再全表扫描（压测暴露的瓶颈）。
     """
-    total = await session.scalar(select(func.count()).select_from(Product)) or 0
+    total = await session.scalar(
+        select(func.count()).select_from(Product).where(Product.is_active == True)
+    ) or 0
     result = await session.scalars(
-        select(Product).order_by(Product.id).limit(limit).offset(offset)
+        select(Product)
+        .where(Product.is_active == True)  # 列表只显示上架商品（业务规则）
+        .order_by(Product.id)
+        .limit(limit)
+        .offset(offset)
     )
     return list(result), total
 

@@ -19,6 +19,8 @@ settings = get_settings()
 
 PRODUCTS_LIST_KEY = "store:products:ver"  # 列表缓存版本号（失效 = +1）
 PRODUCT_LIST_TTL = 60  # 秒
+# 已下架标记：详情缓存里存这个值 = 商品存在但下架（410，零数据库访问）
+DELISTED = "DELISTED"
 
 
 async def _get_or_set(key: str, ttl: int, loader, *, cache_none: bool = False):
@@ -89,16 +91,33 @@ async def get_products_cached(session, limit: int, offset: int) -> dict:
     return await _get_or_set(key, PRODUCT_LIST_TTL, loader)
 
 
-async def get_product_cached(session, product_id: int) -> dict | None:
-    """单个商品缓存（含穿透空值缓存）。"""
+async def get_product_cached(session, product_id: int) -> dict | str | None:
+    """单个商品缓存：dict=正常 | DELISTED=已下架 | None=不存在。
+
+    已下架商品也缓存标记（复用穿透空值缓存的思路）——
+    详情请求命中标记后零数据库访问即可返回"已下架"。
+    """
 
     async def loader():
         product = await data.get_product_by_id(session, product_id)
         if product is None:
             return None
+        if not product.is_active:
+            return DELISTED  # 已下架：缓存标记（json 序列化往返后仍是该字符串）
         return ProductOut.model_validate(product).model_dump(mode="json")
 
     return await _get_or_set(f"store:product:{product_id}", 60, loader, cache_none=True)
+
+
+async def mark_product_delisted(product_id: int) -> None:
+    """下架时写"已下架"标记（不是删缓存！）。
+
+    下次详情请求命中标记直接返回 410，不查数据库。
+    序列化格式与 loader 路径一致（json.dumps），读路径才能正确还原。
+    """
+    await (await get_redis()).set(
+        f"store:product:{product_id}", json.dumps(DELISTED), ex=60
+    )
 
 
 async def invalidate_products() -> None:
