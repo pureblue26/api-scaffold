@@ -132,7 +132,7 @@ def test_shelved_at_only_on_real_activation(client):
     # 1. _setup 拿 admin_headers 和 pid，读初始 shelved_at（_get_shelved_at）
     # 2. 重复上架已上架的商品 → 断言 shelved_at 不变
     # 3. 下架再上架 → 断言 shelved_at 比初始值大（更新了）
-    admin_headers, user_headers, pid = _setup(client)
+    admin_headers, _, pid = _setup(client)
     client.post(f"/api/products/{pid}/relist", headers=admin_headers)
     old_timestamp = asyncio.run(_get_shelved_at(client, pid))
     client.post(f"/api/products/{pid}/relist", headers=admin_headers)
